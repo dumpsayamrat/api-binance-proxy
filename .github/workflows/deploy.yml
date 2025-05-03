@@ -84,7 +84,9 @@ jobs:
         run: |
           # Get outputs in JSON format for the API URL only
           terraform output -json > terraform_outputs.json
-          
+
+          cat terraform_outputs.json
+
           # Extract API URL from the JSON output
           API_URL=$(jq -r '.api_gateway_invoke_url.value' terraform_outputs.json)
           
