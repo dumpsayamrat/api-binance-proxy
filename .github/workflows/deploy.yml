@@ -1,0 +1,92 @@
+name: Deploy Binance API Proxy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  TF_VERSION: "1.5.3"
+  AWS_REGION: "ap-southeast-1"  # Set default region to Singapore
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    environment: prod
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+          target: x86_64-unknown-linux-gnu
+
+      - name: Install cross-compilation tools
+        run: |
+          rustup target add x86_64-unknown-linux-musl
+          sudo apt-get update
+          sudo apt-get install -y musl-tools
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION || env.AWS_REGION }}
+
+      - name: Build Lambda function
+        run: |
+          # Build for AWS Lambda (Amazon Linux 2)
+          cargo build --release --target x86_64-unknown-linux-musl
+          # Create deployment package
+          mkdir -p lambda-package
+          cp target/x86_64-unknown-linux-musl/release/api-binance-proxy lambda-package/bootstrap
+          cd lambda-package
+          zip -r lambda-function.zip bootstrap
+          mv lambda-function.zip ../terraform/
+
+      - name: Initialize Terraform
+        working-directory: ./terraform
+        run: |
+          # Create S3 bucket for Terraform state if it doesn't exist
+          aws s3api head-bucket --bucket ${{ secrets.TF_STATE_BUCKET }} || aws s3 mb s3://${{ secrets.TF_STATE_BUCKET }}
+          terraform init \
+            -backend-config="bucket=${{ secrets.TF_STATE_BUCKET }}" \
+            -backend-config="region=${{ secrets.AWS_REGION }}" \
+            -backend-config="key=api-binance-proxy/terraform.tfstate"
+
+      - name: Terraform Plan
+        working-directory: ./terraform
+        run: |
+          terraform plan \
+            -var="aws_region=${{ secrets.AWS_REGION }}" \
+            -var="environment=prod" \
+            -var="tf_state_bucket=${{ secrets.TF_STATE_BUCKET }}"
+
+      - name: Terraform Apply
+        working-directory: ./terraform
+        run: |
+          terraform apply -auto-approve \
+            -var="aws_region=${{ secrets.AWS_REGION }}" \
+            -var="environment=prod" \
+            -var="tf_state_bucket=${{ secrets.TF_STATE_BUCKET }}"
+
+      - name: Output API Gateway Info
+        working-directory: ./terraform
+        run: |
+          echo "API Gateway URL: $(terraform output -raw api_gateway_invoke_url)"
+          # Store the API Key securely
+          API_KEY=$(terraform output -raw api_key)
+          echo "::add-mask::$API_KEY"
+          echo "API Key has been successfully generated and masked"
+          # Store this key securely in AWS Parameter Store
+          aws ssm put-parameter --name "/api-binance-proxy/api-key" --value "$API_KEY" --type "SecureString" --overwrite --description "API key for Binance API Proxy"
+          echo "API key has been stored in AWS Parameter Store at /api-binance-proxy/api-key"

@@ -1,0 +1,88 @@
+name: Example Binance API Usage
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 */6 * * *'  # Run every 6 hours
+
+jobs:
+  fetch-binance-data:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests pandas matplotlib
+
+      - name: Fetch Binance data through proxy
+        run: |
+          # Use our Binance API proxy instead of direct access
+          curl -X GET "${{ secrets.BINANCE_PROXY_URL }}/api/v3/ticker/price?symbol=BTCUSDT" \
+            -H "x-api-key: ${{ secrets.BINANCE_PROXY_API_KEY }}" \
+            -o btc_price.json
+          
+          echo "Current BTC price:"
+          cat btc_price.json
+          
+          # Fetch more data - example for daily klines/candlesticks
+          curl -X GET "${{ secrets.BINANCE_PROXY_URL }}/api/v3/klines?symbol=BTCUSDT&interval=1d&limit=30" \
+            -H "x-api-key: ${{ secrets.BINANCE_PROXY_API_KEY }}" \
+            -o btc_klines.json
+      
+      - name: Process data with Python
+        run: |
+          python - <<EOF
+          import json
+          import pandas as pd
+          import matplotlib.pyplot as plt
+          from datetime import datetime
+          
+          # Load candlestick data
+          with open('btc_klines.json', 'r') as f:
+              klines = json.load(f)
+          
+          # Convert to DataFrame
+          df = pd.DataFrame(klines, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume', 'close_time', 
+                                            'quote_asset_volume', 'number_of_trades', 'taker_buy_base_asset_volume', 
+                                            'taker_buy_quote_asset_volume', 'ignore'])
+          
+          # Convert timestamp to datetime
+          df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
+          
+          # Convert price columns to float
+          for col in ['open', 'high', 'low', 'close', 'volume']:
+              df[col] = df[col].astype(float)
+          
+          # Create a simple price chart
+          plt.figure(figsize=(12, 6))
+          plt.plot(df['timestamp'], df['close'], label='BTC/USDT')
+          plt.title('Bitcoin Price Last 30 Days')
+          plt.xlabel('Date')
+          plt.ylabel('Price (USDT)')
+          plt.grid(True)
+          plt.legend()
+          plt.tight_layout()
+          plt.savefig('btc_price_chart.png')
+          
+          # Print summary statistics
+          print(f"Summary Statistics for BTC/USDT:")
+          print(f"Current Price: ${df['close'].iloc[-1]:,.2f}")
+          print(f"30-Day High: ${df['high'].max():,.2f}")
+          print(f"30-Day Low: ${df['low'].min():,.2f}")
+          print(f"30-Day Average: ${df['close'].mean():,.2f}")
+          print(f"30-Day Volatility: {df['close'].std() / df['close'].mean() * 100:.2f}%")
+          EOF
+      
+      - name: Upload chart as artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: btc-price-chart
+          path: btc_price_chart.png
