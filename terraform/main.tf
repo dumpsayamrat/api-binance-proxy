@@ -62,13 +62,14 @@ resource "aws_iam_role_policy_attachment" "lambda_policy_attachment" {
 
 # Lambda function
 resource "aws_lambda_function" "api_binance_proxy" {
-  function_name = "api-binance-proxy"
-  filename      = "lambda-function.zip"
-  role          = aws_iam_role.lambda_role.arn
-  handler       = "bootstrap"
-  runtime       = "provided.al2"
-  memory_size   = 128
-  timeout       = 30
+  function_name    = "api-binance-proxy"
+  filename         = "lambda-function.zip"
+  source_code_hash = filebase64sha256("lambda-function.zip")
+  role             = aws_iam_role.lambda_role.arn
+  handler          = "bootstrap"
+  runtime          = "provided.al2"
+  memory_size      = 128
+  timeout          = 30
 
   environment {
     variables = {
