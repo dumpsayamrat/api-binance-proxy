@@ -82,14 +82,16 @@ jobs:
       - name: Output API Gateway Info
         working-directory: ./terraform
         run: |
-          # Output the API Gateway URL
-          API_URL=$(terraform output -raw api_gateway_invoke_url)
+          # Output the API Gateway URL - using a file to avoid debug output mixing with values
+          terraform output -raw api_gateway_invoke_url > api_url.txt
+          API_URL=$(cat api_url.txt)
           echo "API Gateway URL: $API_URL"
           
-          # Handle the API Key properly to avoid debug output mixing with the key
-          API_KEY=$(terraform output -raw api_key 2>/dev/null)
+          # Handle the API Key properly - using a file to avoid debug output mixing with the key
+          terraform output -raw api_key > api_key.txt 2>/dev/null
+          API_KEY=$(cat api_key.txt)
+          
           # Mask the API key in logs
-          echo "::add-mask::test-masking"
           echo "::add-mask::$API_KEY"
           echo "API Key has been successfully generated and masked"
           

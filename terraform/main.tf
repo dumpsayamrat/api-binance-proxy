@@ -132,11 +132,18 @@ resource "aws_api_gateway_deployment" "deployment" {
   ]
 
   rest_api_id = aws_api_gateway_rest_api.api.id
-  stage_name  = var.environment
+  # Removed deprecated stage_name attribute
 
   lifecycle {
     create_before_destroy = true
   }
+}
+
+# Add separate API Gateway Stage resource (recommended approach)
+resource "aws_api_gateway_stage" "stage" {
+  deployment_id = aws_api_gateway_deployment.deployment.id
+  rest_api_id   = aws_api_gateway_rest_api.api.id
+  stage_name    = var.environment
 }
 
 # Lambda permission for API Gateway
@@ -163,7 +170,7 @@ resource "aws_api_gateway_usage_plan" "usage_plan" {
 
   api_stages {
     api_id = aws_api_gateway_rest_api.api.id
-    stage  = aws_api_gateway_deployment.deployment.stage_name
+    stage  = aws_api_gateway_stage.stage.stage_name
   }
 
   # Optional: Configure throttling
@@ -188,7 +195,7 @@ resource "aws_api_gateway_usage_plan_key" "usage_plan_key" {
 
 # Output API Gateway invoke URL
 output "api_gateway_invoke_url" {
-  value = "${aws_api_gateway_deployment.deployment.invoke_url}/api"
+  value = "${aws_api_gateway_stage.stage.invoke_url}/api"
 }
 
 # Output API Key
