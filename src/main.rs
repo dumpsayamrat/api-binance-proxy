@@ -117,15 +117,19 @@ async fn proxy_function(event: Request) -> Result<Response<Body>, Error> {
     let path = event.uri().path();
     let query = event.uri().query().unwrap_or("");
     
-    // Ensure the path starts with /api/ 
-    if !path.starts_with("/api/") {
+    // Check if the path contains /api/ segment (accounting for stage names like /prod/api/)
+    if !path.contains("/api/") {
         return Ok(Response::builder()
             .status(400)
-            .body(Body::from(json!({"error": "Path must start with /api/"}).to_string()))?);
+            .body(Body::from(json!({"error": "Path must contain /api/ segment"}).to_string()))?);
     }
     
+    // Extract the API path by finding the /api/ segment
+    let api_path_start = path.find("/api/").unwrap();
+    let api_path = &path[api_path_start..];
+    
     // Build the full Binance URL
-    let binance_url = format!("{}{}", BINANCE_API_BASE, path);
+    let binance_url = format!("{}{}", BINANCE_API_BASE, api_path);
     let full_url = if query.is_empty() {
         binance_url
     } else {
