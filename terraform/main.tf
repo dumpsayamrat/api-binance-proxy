@@ -132,7 +132,7 @@ resource "aws_api_gateway_deployment" "deployment" {
   ]
 
   rest_api_id = aws_api_gateway_rest_api.api.id
-  # Removed deprecated stage_name attribute
+  # stage_name was removed but will be handled by the separate stage resource
 
   lifecycle {
     create_before_destroy = true
@@ -140,10 +140,18 @@ resource "aws_api_gateway_deployment" "deployment" {
 }
 
 # Add separate API Gateway Stage resource (recommended approach)
+# Note: This may need to be imported if the stage already exists
 resource "aws_api_gateway_stage" "stage" {
   deployment_id = aws_api_gateway_deployment.deployment.id
   rest_api_id   = aws_api_gateway_rest_api.api.id
   stage_name    = var.environment
+  
+  # This lifecycle rule helps prevent destroying and recreating the stage
+  lifecycle {
+    create_before_destroy = true
+    # This prevents the stage from being destroyed during this migration
+    prevent_destroy = true
+  }
 }
 
 # Lambda permission for API Gateway
@@ -191,6 +199,11 @@ resource "aws_api_gateway_usage_plan_key" "usage_plan_key" {
   key_id        = aws_api_gateway_api_key.api_key.id
   key_type      = "API_KEY"
   usage_plan_id = aws_api_gateway_usage_plan.usage_plan.id
+}
+
+# Output API Gateway REST API ID (needed for importing stage)
+output "aws_api_gateway_rest_api_id" {
+  value = aws_api_gateway_rest_api.api.id
 }
 
 # Output API Gateway invoke URL
