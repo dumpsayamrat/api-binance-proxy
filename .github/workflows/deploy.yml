@@ -82,25 +82,24 @@ jobs:
       - name: Output API Gateway Info
         working-directory: ./terraform
         run: |
-          # Output the API Gateway URL - using a file to avoid debug output mixing with values
-          terraform output -raw api_gateway_invoke_url > api_url.txt
-          API_URL=$(cat api_url.txt)
-          echo "API Gateway URL: $API_URL"
+          # Get outputs in JSON format for the API URL only
+          terraform output -json > terraform_outputs.json
           
-          # Handle the API Key properly - using a file to avoid debug output mixing with the key
-          terraform output -raw api_key > api_key.txt 2>/dev/null
-          API_KEY=$(cat api_key.txt)
+          # Extract API URL from the JSON output
+          API_URL=$(jq -r '.api_gateway_invoke_url.value' terraform_outputs.json)
           
-          # Mask the API key in logs
-          echo "::add-mask::$API_KEY"
-          echo "API Key has been successfully generated and masked"
+          # Extract API Key without logging it
+          API_KEY=$(jq -r '.api_key.value' terraform_outputs.json)
           
-          # Store this key securely in AWS Parameter Store
+          # Silently store the API key in AWS Parameter Store without logging it anywhere
           aws ssm put-parameter \
             --name "/api-binance-proxy/api-key" \
             --value "$API_KEY" \
             --type "SecureString" \
             --overwrite \
-            --description "API key for Binance API Proxy"
+            --description "API key for Binance API Proxy" \
+            --no-cli-pager
           
-          echo "API key has been stored in AWS Parameter Store at /api-binance-proxy/api-key"
+          # Only output the API URL, not the API key
+          echo "API Gateway URL: $API_URL"
+          echo "API key has been stored securely in AWS Parameter Store at /api-binance-proxy/api-key"
