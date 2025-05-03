@@ -82,11 +82,23 @@ jobs:
       - name: Output API Gateway Info
         working-directory: ./terraform
         run: |
-          echo "API Gateway URL: $(terraform output -raw api_gateway_invoke_url)"
-          # Store the API Key securely
-          API_KEY=$(terraform output -raw api_key)
+          # Output the API Gateway URL
+          API_URL=$(terraform output -raw api_gateway_invoke_url)
+          echo "API Gateway URL: $API_URL"
+          
+          # Handle the API Key properly to avoid debug output mixing with the key
+          API_KEY=$(terraform output -raw api_key 2>/dev/null)
+          # Mask the API key in logs
+          echo "::add-mask::test-masking"
           echo "::add-mask::$API_KEY"
           echo "API Key has been successfully generated and masked"
+          
           # Store this key securely in AWS Parameter Store
-          aws ssm put-parameter --name "/api-binance-proxy/api-key" --value "$API_KEY" --type "SecureString" --overwrite --description "API key for Binance API Proxy"
+          aws ssm put-parameter \
+            --name "/api-binance-proxy/api-key" \
+            --value "$API_KEY" \
+            --type "SecureString" \
+            --overwrite \
+            --description "API key for Binance API Proxy"
+          
           echo "API key has been stored in AWS Parameter Store at /api-binance-proxy/api-key"
